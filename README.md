@@ -1,4 +1,14 @@
+<p align="center">
+  <img src="assets/avatar.png" alt="arma-workshop-watch logo" width="160">
+</p>
+
 # arma-workshop-watch
+
+[![Build](https://github.com/Andx667/arma-workshop-watch/actions/workflows/build.yml/badge.svg)](https://github.com/Andx667/arma-workshop-watch/actions/workflows/build.yml)
+[![Docker image](https://img.shields.io/badge/ghcr.io-andx667%2Farma--workshop--watch-blue?logo=docker&logoColor=white)](https://github.com/Andx667/arma-workshop-watch/pkgs/container/arma-workshop-watch)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
+[![discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2?logo=discord&logoColor=white)](https://github.com/Rapptz/discord.py)
+![Last commit](https://img.shields.io/github/last-commit/Andx667/arma-workshop-watch)
 
 A Discord bot that posts a message when a watched Steam Workshop item is updated. Built for Arma 3 mods, but it works for any game's Workshop.
 
