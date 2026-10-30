@@ -1,0 +1,8 @@
+# Local run: docker compose up --build
+services:
+  bot:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

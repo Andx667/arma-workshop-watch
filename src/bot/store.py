@@ -1,0 +1,109 @@
+from dataclasses import dataclass
+from pathlib import Path
+
+import aiosqlite
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS guilds (
+    guild_id   INTEGER PRIMARY KEY,
+    channel_id INTEGER
+);
+CREATE TABLE IF NOT EXISTS mods (
+    guild_id     INTEGER NOT NULL,
+    mod_id       INTEGER NOT NULL,
+    title        TEXT    NOT NULL,
+    last_updated INTEGER NOT NULL,
+    missing      INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, mod_id)
+);
+"""
+
+
+@dataclass(frozen=True)
+class Subscription:
+    guild_id: int
+    channel_id: int | None
+    title: str
+    last_updated: int
+    missing: bool
+
+
+@dataclass(frozen=True)
+class WatchedMod:
+    mod_id: int
+    title: str
+
+
+class Store:
+    def __init__(self, db: aiosqlite.Connection):
+        self._db = db
+
+    @classmethod
+    async def open(cls, path: Path) -> "Store":
+        path.parent.mkdir(parents=True, exist_ok=True)
+        db = await aiosqlite.connect(path)
+        db.row_factory = aiosqlite.Row
+        await db.executescript(SCHEMA)
+        await db.commit()
+        return cls(db)
+
+    async def close(self) -> None:
+        await self._db.close()
+
+    async def set_channel(self, guild_id: int, channel_id: int) -> None:
+        await self._db.execute(
+            "INSERT INTO guilds (guild_id, channel_id) VALUES (?, ?) "
+            "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+            (guild_id, channel_id),
+        )
+        await self._db.commit()
+
+    async def get_channel(self, guild_id: int) -> int | None:
+        async with self._db.execute("SELECT channel_id FROM guilds WHERE guild_id = ?", (guild_id,)) as cur:
+            row = await cur.fetchone()
+        return row["channel_id"] if row else None
+
+    async def add_mod(self, guild_id: int, mod_id: int, title: str, last_updated: int) -> bool:
+        cur = await self._db.execute(
+            "INSERT OR IGNORE INTO mods (guild_id, mod_id, title, last_updated) VALUES (?, ?, ?, ?)",
+            (guild_id, mod_id, title, last_updated),
+        )
+        await self._db.commit()
+        return cur.rowcount > 0
+
+    async def remove_mod(self, guild_id: int, mod_id: int) -> bool:
+        cur = await self._db.execute("DELETE FROM mods WHERE guild_id = ? AND mod_id = ?", (guild_id, mod_id))
+        await self._db.commit()
+        return cur.rowcount > 0
+
+    async def list_mods(self, guild_id: int) -> list[WatchedMod]:
+        async with self._db.execute(
+            "SELECT mod_id, title FROM mods WHERE guild_id = ? ORDER BY title COLLATE NOCASE", (guild_id,)
+        ) as cur:
+            return [WatchedMod(r["mod_id"], r["title"]) async for r in cur]
+
+    async def all_mod_ids(self) -> list[int]:
+        async with self._db.execute("SELECT DISTINCT mod_id FROM mods") as cur:
+            return [r["mod_id"] async for r in cur]
+
+    async def subscriptions(self, mod_id: int) -> list[Subscription]:
+        async with self._db.execute(
+            "SELECT m.guild_id, g.channel_id, m.title, m.last_updated, m.missing "
+            "FROM mods m LEFT JOIN guilds g ON g.guild_id = m.guild_id WHERE m.mod_id = ?",
+            (mod_id,),
+        ) as cur:
+            return [
+                Subscription(r["guild_id"], r["channel_id"], r["title"], r["last_updated"], bool(r["missing"]))
+                async for r in cur
+            ]
+
+    async def record_update(self, guild_id: int, mod_id: int, title: str, last_updated: int) -> None:
+        await self._db.execute(
+            "UPDATE mods SET title = ?, last_updated = ?, missing = 0 WHERE guild_id = ? AND mod_id = ?",
+            (title, last_updated, guild_id, mod_id),
+        )
+        await self._db.commit()
+
+    async def set_missing(self, mod_id: int, missing: bool) -> None:
+        await self._db.execute("UPDATE mods SET missing = ? WHERE mod_id = ?", (int(missing), mod_id))
+        await self._db.commit()

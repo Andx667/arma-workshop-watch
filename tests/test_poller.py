@@ -1,0 +1,144 @@
+import asyncio
+
+import discord
+
+from bot import steam
+from bot.poller import Poller
+from bot.store import Store
+
+
+class FakeChannel:
+    def __init__(self, fail=None):
+        self.sent = []
+        self.fail = fail
+
+    async def send(self, **kwargs):
+        if self.fail:
+            raise self.fail
+        self.sent.append(kwargs)
+
+
+class FakeClient:
+    def __init__(self, channels):
+        self.channels = channels
+
+    async def wait_until_ready(self):
+        pass
+
+    def get_channel(self, channel_id):
+        return self.channels.get(channel_id)
+
+
+def details(mod_id=1, updated=100, found=True):
+    return steam.ModDetails(mod_id, "Cool Mod", updated, None, found)
+
+
+def test_notifies_once_per_update(tmp_path, monkeypatch):
+    async def scenario():
+        channel = FakeChannel()
+        state = {"details": details(updated=100)}
+
+        async def fake_details(session, ids):
+            return {i: state["details"] for i in ids}
+
+        async def fake_changelog(session, mod_id):
+            return steam.Changelog("today", "notes")
+
+        monkeypatch.setattr(steam, "fetch_details", fake_details)
+        monkeypatch.setattr(steam, "fetch_changelog", fake_changelog)
+        store = await Store.open(tmp_path / "db.sqlite")
+        await store.set_channel(10, 99)
+        await store.add_mod(10, 1, "Cool Mod", 100)
+        poller = Poller(FakeClient({99: channel}), store, None, 10, tmp_path / "hb")
+
+        await poller.run_once()
+        assert channel.sent == []  # baseline, nothing new
+
+        state["details"] = details(updated=200)
+        await poller.run_once()
+        await poller.run_once()
+        assert len(channel.sent) == 1
+        assert channel.sent[0]["embed"].description == "notes"
+        assert (tmp_path / "hb").exists()
+        await store.close()
+
+    asyncio.run(scenario())
+
+
+def test_transient_failure_retries(tmp_path, monkeypatch):
+    async def scenario():
+        channel = FakeChannel(fail=RuntimeError("boom"))
+
+        async def fake_details(session, ids):
+            return {i: details(updated=200) for i in ids}
+
+        async def fake_changelog(session, mod_id):
+            return None
+
+        monkeypatch.setattr(steam, "fetch_details", fake_details)
+        monkeypatch.setattr(steam, "fetch_changelog", fake_changelog)
+        store = await Store.open(tmp_path / "db.sqlite")
+        await store.set_channel(10, 99)
+        await store.add_mod(10, 1, "Cool Mod", 100)
+        poller = Poller(FakeClient({99: channel}), store, None, 10, tmp_path / "hb")
+
+        await poller.run_once()
+        assert (await store.subscriptions(1))[0].last_updated == 100  # not advanced
+
+        channel.fail = None
+        await poller.run_once()
+        assert len(channel.sent) == 1
+        assert (await store.subscriptions(1))[0].last_updated == 200
+        await store.close()
+
+    asyncio.run(scenario())
+
+
+def test_missing_mod_warns_once(tmp_path, monkeypatch):
+    async def scenario():
+        channel = FakeChannel()
+
+        async def fake_details(session, ids):
+            return {i: details(found=False) for i in ids}
+
+        monkeypatch.setattr(steam, "fetch_details", fake_details)
+        store = await Store.open(tmp_path / "db.sqlite")
+        await store.set_channel(10, 99)
+        await store.add_mod(10, 1, "Cool Mod", 100)
+        poller = Poller(FakeClient({99: channel}), store, None, 10, tmp_path / "hb")
+
+        await poller.run_once()
+        await poller.run_once()
+        assert len(channel.sent) == 1
+        assert "can no longer be found" in channel.sent[0]["content"]
+        await store.close()
+
+    asyncio.run(scenario())
+
+
+def test_forbidden_is_swallowed_and_advances(tmp_path, monkeypatch):
+    async def scenario():
+        class Resp:
+            status = 403
+            reason = "Forbidden"
+
+        channel = FakeChannel(fail=discord.Forbidden(Resp(), "no"))
+
+        async def fake_details(session, ids):
+            return {i: details(updated=200) for i in ids}
+
+        async def fake_changelog(session, mod_id):
+            return None
+
+        monkeypatch.setattr(steam, "fetch_details", fake_details)
+        monkeypatch.setattr(steam, "fetch_changelog", fake_changelog)
+        store = await Store.open(tmp_path / "db.sqlite")
+        await store.set_channel(10, 99)
+        await store.add_mod(10, 1, "Cool Mod", 100)
+        poller = Poller(FakeClient({99: channel}), store, None, 10, tmp_path / "hb")
+
+        await poller.run_once()
+        assert (await store.subscriptions(1))[0].last_updated == 200
+        await store.close()
+
+    asyncio.run(scenario())
