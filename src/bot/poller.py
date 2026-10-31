@@ -51,7 +51,7 @@ class Poller:
                 if sub.missing:
                     continue
                 try:
-                    await self._send(sub.channel_id, content=missing_message(sub.title, details.id))
+                    await self._send(sub.channel_id, sub.guild_id, content=missing_message(sub.title, details.id))
                 except Exception:
                     log.exception("Could not warn guild %s about missing mod %s", sub.guild_id, details.id)
                     return
@@ -64,23 +64,24 @@ class Poller:
                 await self.store.set_missing(details.id, False)
             return
 
+        log.info("Mod %s (%s) updated on Steam, notifying %d guild(s)", details.id, details.title, len(due))
         changelog = await steam.fetch_changelog(self.session, details.id)
         for sub in due:
             presets = await self.store.sources(sub.guild_id, details.id)
             embed = build_update_embed(details, changelog, presets)
             try:
-                await self._send(sub.channel_id, embed=embed)
+                await self._send(sub.channel_id, sub.guild_id, embed=embed)
             except Exception:
                 # Transient failure: leave last_updated alone so the next poll retries.
                 log.exception("Could not notify guild %s about mod %s", sub.guild_id, details.id)
                 continue
             await self.store.record_update(sub.guild_id, details.id, details.title, details.time_updated)
 
-    async def _send(self, channel_id: int | None, **kwargs) -> None:
+    async def _send(self, channel_id: int | None, guild_id: int, **kwargs) -> None:
         """Permanent problems (no channel set, channel gone, no permission) are logged and swallowed;
         anything else propagates so the caller can retry on the next poll."""
         if channel_id is None:
-            log.info("No notification channel set, skipping message")
+            log.info("No notification channel set for guild %s, skipping message", guild_id)
             return
         channel = self.client.get_channel(channel_id)
         if channel is None:
