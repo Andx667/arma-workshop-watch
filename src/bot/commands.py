@@ -1,9 +1,14 @@
+from pathlib import Path
+
 import aiohttp
 import discord
 from discord import app_commands
 
 from . import steam
 from .store import Store
+
+
+MAX_PRESET_BYTES = 2_000_000
 
 
 class WatchGroup(app_commands.Group):
@@ -39,6 +44,42 @@ class WatchGroup(app_commands.Group):
             await interaction.followup.send(f"Already watching **{details.title}**.")
             return
         message = f"Now watching **{details.title}** ({steam.workshop_url(mod_id)})."
+        if await self.store.get_channel(interaction.guild_id) is None:
+            message += "\nNo notification channel is set yet, use `/watch channel`."
+        await interaction.followup.send(message)
+
+    @app_commands.command(name="import", description="Watch all Workshop mods of an Arma 3 Launcher preset (.html)")
+    @app_commands.describe(preset="Preset HTML file exported from the Arma 3 Launcher")
+    async def import_(self, interaction: discord.Interaction, preset: discord.Attachment):
+        await interaction.response.defer(ephemeral=True)
+        if preset.size > MAX_PRESET_BYTES:
+            await interaction.followup.send("That file is too large for a preset.")
+            return
+        html = (await preset.read()).decode("utf-8", errors="replace")
+        ids = steam.parse_preset_ids(html)
+        preset_name = steam.parse_preset_name(html) or Path(preset.filename).stem
+        if not ids:
+            await interaction.followup.send("No Workshop links found in that file.")
+            return
+        try:
+            details = await steam.fetch_details(self.session, ids)
+        except steam.SteamError:
+            await interaction.followup.send("Steam did not answer, try again in a minute.")
+            return
+        added, existing, missing = 0, 0, []
+        for mod_id in ids:
+            d = details[mod_id]
+            if not d.found:
+                missing.append(mod_id)
+            else:
+                if await self.store.add_mod(interaction.guild_id, mod_id, d.title, d.time_updated):
+                    added += 1
+                else:
+                    existing += 1
+                await self.store.add_source(interaction.guild_id, mod_id, preset_name)
+        message = f"Imported {added} new mods, {existing} were already watched."
+        if missing:
+            message += f"\nNot found on Steam: {', '.join(map(str, missing[:20]))}" + (" …" if len(missing) > 20 else "")
         if await self.store.get_channel(interaction.guild_id) is None:
             message += "\nNo notification channel is set yet, use `/watch channel`."
         await interaction.followup.send(message)

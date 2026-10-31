@@ -21,6 +21,7 @@ All commands need the *Manage Server* permission by default (adjustable in Serve
 | Command | What it does |
 | --- | --- |
 | `/watch channel <#channel>` | Where updates are posted (one channel per server) |
+| `/watch import <file>` | Attach an Arma 3 Launcher preset export (`.html`) and watch every Steam Workshop mod in it. Local mods are skipped. Update notifications then name the preset(s) the mod came from |
 | `/watch add <link or id>` | Start watching a mod. The current state is the baseline, so no message is sent for the mod's existing version |
 | `/watch remove <mod>` | Stop watching (autocompletes) |
 | `/watch list` | Show watched mods |
@@ -67,3 +68,7 @@ DISCORD_TOKEN=... DATA_DIR=./data python -m bot
 ```
 
 Or `cp .env.example .env` and `docker compose up --build`.
+
+## License
+
+[MIT](LICENSE)

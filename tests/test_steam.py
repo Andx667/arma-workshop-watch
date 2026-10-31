@@ -1,4 +1,4 @@
-from bot.steam import parse_changelog, parse_workshop_id
+from bot.steam import parse_changelog, parse_preset_ids, parse_preset_name, parse_workshop_id
 
 CHANGELOG_HTML = """
 <div class="workshopAnnouncement">
@@ -21,6 +21,19 @@ def test_parse_id_variants():
     assert parse_workshop_id("hello") is None
 
 
+def test_parse_preset_ids():
+    html = """<?xml version="1.0" encoding="utf-8"?><html><body><table>
+    <tr data-type="ModContainer"><td data-type="DisplayName">A</td>
+      <td><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=893328083" data-type="Link">x</a></td></tr>
+    <tr data-type="ModContainer"><td data-type="DisplayName">Local</td><td>Local</td></tr>
+    <tr data-type="ModContainer"><td data-type="DisplayName">A again</td>
+      <td><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=893328083" data-type="Link">x</a></td></tr>
+    <tr data-type="ModContainer"><td data-type="DisplayName">B</td>
+      <td><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=1135534951" data-type="Link">x</a></td></tr>
+    </table></body></html>"""
+    assert parse_preset_ids(html) == [893328083, 1135534951]
+
+
 def test_parse_changelog_takes_newest_entry():
     result = parse_changelog(CHANGELOG_HTML)
     assert result is not None
@@ -30,3 +43,8 @@ def test_parse_changelog_takes_newest_entry():
 
 def test_parse_changelog_unknown_layout():
     assert parse_changelog("<html><body>nothing</body></html>") is None
+
+
+def test_parse_preset_name():
+    assert parse_preset_name('<head><meta name="arma:PresetName" content="[TTT] A" /></head>') == "[TTT] A"
+    assert parse_preset_name("<html></html>") is None

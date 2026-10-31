@@ -142,3 +142,34 @@ def test_forbidden_is_swallowed_and_advances(tmp_path, monkeypatch):
         await store.close()
 
     asyncio.run(scenario())
+
+
+def test_update_names_source_presets(tmp_path, monkeypatch):
+    async def scenario():
+        channel = FakeChannel()
+
+        async def fake_details(session, ids):
+            return {i: details(updated=200) for i in ids}
+
+        async def fake_changelog(session, mod_id):
+            return None
+
+        monkeypatch.setattr(steam, "fetch_details", fake_details)
+        monkeypatch.setattr(steam, "fetch_changelog", fake_changelog)
+        store = await Store.open(tmp_path / "db.sqlite")
+        await store.set_channel(10, 99)
+        await store.add_mod(10, 1, "Cool Mod", 100)
+        await store.add_source(10, 1, "Preset B")
+        await store.add_source(10, 1, "Preset A")
+        await store.add_source(10, 1, "Preset A")
+        poller = Poller(FakeClient({99: channel}), store, None, 10, tmp_path / "hb")
+
+        await poller.run_once()
+        embed = channel.sent[0]["embed"]
+        assert embed.fields[0].name == "Presets"
+        assert embed.fields[0].value == "Preset A, Preset B"
+        await store.remove_mod(10, 1)
+        assert await store.sources(10, 1) == []
+        await store.close()
+
+    asyncio.run(scenario())

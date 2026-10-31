@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS mods (
     missing      INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, mod_id)
 );
+CREATE TABLE IF NOT EXISTS mod_sources (
+    guild_id INTEGER NOT NULL,
+    mod_id   INTEGER NOT NULL,
+    preset   TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, mod_id, preset)
+);
 """
 
 
@@ -71,7 +77,22 @@ class Store:
         await self._db.commit()
         return cur.rowcount > 0
 
+    async def add_source(self, guild_id: int, mod_id: int, preset: str) -> None:
+        await self._db.execute(
+            "INSERT OR IGNORE INTO mod_sources (guild_id, mod_id, preset) VALUES (?, ?, ?)",
+            (guild_id, mod_id, preset),
+        )
+        await self._db.commit()
+
+    async def sources(self, guild_id: int, mod_id: int) -> list[str]:
+        async with self._db.execute(
+            "SELECT preset FROM mod_sources WHERE guild_id = ? AND mod_id = ? ORDER BY preset COLLATE NOCASE",
+            (guild_id, mod_id),
+        ) as cur:
+            return [r["preset"] async for r in cur]
+
     async def remove_mod(self, guild_id: int, mod_id: int) -> bool:
+        await self._db.execute("DELETE FROM mod_sources WHERE guild_id = ? AND mod_id = ?", (guild_id, mod_id))
         cur = await self._db.execute("DELETE FROM mods WHERE guild_id = ? AND mod_id = ?", (guild_id, mod_id))
         await self._db.commit()
         return cur.rowcount > 0

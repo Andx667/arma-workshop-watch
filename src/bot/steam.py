@@ -49,6 +49,22 @@ def parse_workshop_id(text: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def parse_preset_ids(html: str) -> list[int]:
+    """Workshop ids of an Arma 3 Launcher preset export, in file order. Local mods have no link and are skipped."""
+    ids: list[int] = []
+    for link in BeautifulSoup(html, "html.parser").find_all("a", href=True):
+        mod_id = parse_workshop_id(link["href"])
+        if mod_id is not None and mod_id not in ids:
+            ids.append(mod_id)
+    return ids
+
+
+def parse_preset_name(html: str) -> str | None:
+    meta = BeautifulSoup(html, "html.parser").find("meta", attrs={"name": "arma:PresetName"})
+    name = meta.get("content", "").strip() if meta else ""
+    return name or None
+
+
 async def fetch_details(session: aiohttp.ClientSession, ids: list[int]) -> dict[int, ModDetails]:
     """Query the public Steam API (no key needed). Ids Steam does not return are reported as not found."""
     result: dict[int, ModDetails] = {}

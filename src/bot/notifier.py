@@ -7,7 +7,9 @@ from .steam import Changelog, ModDetails, workshop_url
 MAX_NOTE = 1500
 
 
-def build_update_embed(details: ModDetails, changelog: Changelog | None) -> discord.Embed:
+def build_update_embed(
+    details: ModDetails, changelog: Changelog | None, presets: list[str] | None = None
+) -> discord.Embed:
     description = ""
     if changelog:
         note = changelog.text
@@ -21,6 +23,9 @@ def build_update_embed(details: ModDetails, changelog: Changelog | None) -> disc
         colour=discord.Colour.blurple(),
         timestamp=datetime.fromtimestamp(details.time_updated, tz=timezone.utc),
     )
+    if presets:
+        value = ", ".join(presets)
+        embed.add_field(name="Preset" if len(presets) == 1 else "Presets", value=value[:1024], inline=False)
     if details.preview_url:
         embed.set_thumbnail(url=details.preview_url)
     embed.set_footer(text=f"Workshop ID {details.id}")

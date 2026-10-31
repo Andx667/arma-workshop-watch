@@ -65,8 +65,9 @@ class Poller:
             return
 
         changelog = await steam.fetch_changelog(self.session, details.id)
-        embed = build_update_embed(details, changelog)
         for sub in due:
+            presets = await self.store.sources(sub.guild_id, details.id)
+            embed = build_update_embed(details, changelog, presets)
             try:
                 await self._send(sub.channel_id, embed=embed)
             except Exception:
