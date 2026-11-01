@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Arma Workshop Watch logo">
+  <img src="assets/logo.png" alt="Arma Workshop Watcher logo">
 </p>
 
 # arma-workshop-watch

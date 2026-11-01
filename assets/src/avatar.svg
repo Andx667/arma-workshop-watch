@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-<title>arma-workshop-watch</title>
+<title>arma-workshop-watcher</title>
 <rect width="512" height="512" rx="0" fill="#161A1F"/>
 <g transform="translate(56.00 56.00) scale(2.00000)" color="#FFFFFF" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><circle cx="100" cy="100" r="92"/>
 <path d="M100 8 V32 M100 168 V192 M8 100 H32 M168 100 H192"/>
